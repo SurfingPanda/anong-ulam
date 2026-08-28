@@ -1,9 +1,9 @@
 "use server";
 
 import { streamObject } from "ai";
-import { google } from "@ai-sdk/google";
 import { createStreamableValue } from "@ai-sdk/rsc";
 
+import { geminiUlamModel } from "@/lib/gemini";
 import { aiUlamSchema, aiUlamPrompt, aiPartialToDish } from "@/lib/ai-ulam";
 import type { Dish } from "@/lib/mock-ulam-data";
 
@@ -32,7 +32,7 @@ export async function streamAiUlam({
     let latest: Dish[] = [];
     try {
       const { partialObjectStream } = streamObject({
-        model: google("gemini-3.6-flash"),
+        model: geminiUlamModel,
         schema: aiUlamSchema,
         prompt: aiUlamPrompt(Math.round(budgetPhp), exclude),
       });

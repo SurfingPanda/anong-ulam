@@ -7,6 +7,7 @@ import {
   type Dish,
 } from "@/lib/mock-ulam-data";
 import { regionMultiplier, type RegionId } from "@/lib/pricing-engine";
+import { geminiConfigured } from "@/lib/gemini";
 
 export type UlamSource = "database" | "mock" | "ai" | "staples";
 
@@ -80,7 +81,7 @@ export async function generateUlam(
   const effectiveBudget = Math.round(roundedBudget / regionMultiplier(region));
 
   // Gemini configured -> every result also streams extra AI dishes on top.
-  const canStream = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+  const canStream = geminiConfigured;
 
   // 2. Edge case: hyper-low budget
   if (roundedBudget < HYPER_BUDGET_THRESHOLD) {
