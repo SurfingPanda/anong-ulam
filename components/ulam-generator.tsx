@@ -29,6 +29,7 @@ import {
 import { cn, formatPHP } from "@/lib/utils";
 import {
   priceDish,
+  regionMultiplier,
   type PriceMode,
   type PricedDish,
   type RegionId,
@@ -41,7 +42,39 @@ import {
 } from "@/app/actions/generate-ulam";
 import { streamAiUlam } from "@/app/actions/stream-ulam-ai";
 import { readStreamableValue } from "@ai-sdk/rsc";
-import type { Dish } from "@/lib/mock-ulam-data";
+import { MOCK_DISHES, type Dish } from "@/lib/mock-ulam-data";
+
+/** Client-side fallback used when the server action can't be reached (offline). */
+function offlineGenerateUlam(
+  budget: number,
+  region: RegionId,
+): GenerateUlamResult {
+  const rounded = Math.round(budget);
+  const eff = Math.round(rounded / regionMultiplier(region));
+  const ranked = [...MOCK_DISHES]
+    .filter((d) => d.est_total_cost <= eff)
+    .sort(
+      (a, b) =>
+        b.est_total_cost - a.est_total_cost ||
+        a.prep_time_mins - b.prep_time_mins,
+    )
+    .slice(0, 6);
+  const dishes =
+    ranked.length >= 2
+      ? ranked
+      : [...MOCK_DISHES]
+          .sort((a, b) => a.est_total_cost - b.est_total_cost)
+          .slice(0, 3);
+  return {
+    ok: true,
+    budget: rounded,
+    region,
+    source: "mock",
+    streaming: false,
+    note: "Offline ka ngayon — ito ang mga ulam mula sa naka-save na listahan.",
+    dishes,
+  };
+}
 
 type SortKey = "sulit" | "cheapest" | "quickest";
 
@@ -182,7 +215,13 @@ export function UlamGenerator() {
       setAiStreaming(false);
 
       startTransition(async () => {
-        const res = await generateUlam({ budgetPhp: budget, region: reg });
+        let res: GenerateUlamResult;
+        try {
+          res = await generateUlam({ budgetPhp: budget, region: reg });
+        } catch {
+          // server action unreachable (offline) -> local dataset fallback
+          res = offlineGenerateUlam(budget, reg);
+        }
         if (!res.ok) {
           setResult(null);
           setError(res.error ?? "May nangyaring mali. Subukan muli.");
@@ -262,6 +301,13 @@ export function UlamGenerator() {
     setSelected(dish);
     setDrawerOpen(true);
   }
+
+  // PWA shortcut / deep link: /?b=300 auto-runs that budget on first load.
+  React.useEffect(() => {
+    const b = Number(new URLSearchParams(window.location.search).get("b"));
+    if (Number.isFinite(b) && b > 0) handleSearch(Math.round(b));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const SourceIcon =
     result?.source === "database"

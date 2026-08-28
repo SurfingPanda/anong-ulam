@@ -1,10 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { PwaRegister } from "@/components/pwa-register";
 
 export const metadata: Metadata = {
   title: "Anong Ulam? — Budget-friendly meal ideas for every Filipino home",
   description:
     "Ilagay ang iyong budget sa piso at agad kang bibigyan ng mga mungkahing ulam na kaya ng bulsa. Mula palengke hanggang kaldero.",
+  applicationName: "Anong Ulam?",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Anong Ulam?",
+    statusBarStyle: "default",
+  },
   keywords: [
     "anong ulam",
     "ulam ideas",
@@ -17,6 +25,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#C84B31",
+  colorScheme: "light",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -41,7 +51,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

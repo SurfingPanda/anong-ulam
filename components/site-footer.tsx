@@ -1,5 +1,7 @@
 import { Heart } from "lucide-react";
 
+import { PwaInstallButton } from "@/components/pwa-install-button";
+
 export function SiteFooter() {
   return (
     <footer className="relative mt-24 border-t-2 border-primary/10 bg-card/70">
@@ -9,20 +11,23 @@ export function SiteFooter() {
           Gawa nang may pagmamahal para sa pamilyang Pilipino
           <Heart className="h-4 w-4 fill-primary text-primary" />
         </p>
-        <nav className="flex items-center gap-5 font-display text-sm font-bold">
-          <a
-            href="#"
-            className="text-muted-foreground transition-colors hover:text-primary"
-          >
-            Privacy Policy
-          </a>
-          <a
-            href="#"
-            className="text-muted-foreground transition-colors hover:text-primary"
-          >
-            Terms
-          </a>
-        </nav>
+        <div className="flex items-center gap-4">
+          <PwaInstallButton />
+          <nav className="flex items-center gap-5 font-display text-sm font-bold">
+            <a
+              href="#"
+              className="text-muted-foreground transition-colors hover:text-primary"
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="#"
+              className="text-muted-foreground transition-colors hover:text-primary"
+            >
+              Terms
+            </a>
+          </nav>
+        </div>
       </div>
       <div className="border-t-2 border-primary/10 py-3">
         <p className="container text-center text-xs font-semibold text-muted-foreground">
