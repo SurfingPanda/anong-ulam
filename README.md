@@ -195,6 +195,22 @@ supabase/
 .env.example
 ```
 
+## PWA
+
+Installable, offline-capable:
+
+- `app/manifest.ts` — standalone display, `#C84B31` theme, maskable icons
+  (rendered from `public/icons/icon.svg` via `sharp`), `?b=<budget>` shortcuts.
+- `public/sw.js` — hand-rolled service worker (no Workbox): network-first for
+  pages with a cached-shell fallback; cache-first for `/_next/static`,
+  `/dishes`, `/icons`, and Google Fonts.
+- `components/pwa-register.tsx` registers it (production only);
+  `components/pwa-install-button.tsx` shows an "I-install ang app" chip on
+  `beforeinstallprompt`.
+- **Offline search:** when the server action can't be reached,
+  `ulam-generator.tsx` falls back to a client-side filter over the bundled
+  dataset (AI extras need network and degrade gracefully).
+
 ## Deploy to Vercel
 
 1. Push to GitHub, import in Vercel (Next.js auto-detected).
