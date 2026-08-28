@@ -1,0 +1,20 @@
+Dish photos — sourced from Wikimedia Commons.
+Each file's description page: https://commons.wikimedia.org/wiki/File:<name>
+
+pork-adobo.jpg            File:Adobo DSCF4391.jpg — Joy D. Ganaden — CC BY-SA 4.0
+chicken-tinola.jpg       File:Tinolalunch.jpg — FoxLad (English Wikipedia) — CC BY 3.0
+pork-sinigang.jpg        File:Sinigang na Baboy.jpg — Ewen Roberts (Flickr) — CC BY 2.0
+chicken-afritada.jpg     File:Chicken Afritada on white rice with pineapple tidbits (Philippines) 2.jpg — CC BY-SA
+kare-kare.jpg            File:Kare-kare.jpg — Marco Abundo (Flickr) — CC BY 2.0
+embutido.jpg             File:Embutido.jpg — Marife.altabano — CC BY-SA 4.0
+ginisang-monggo.jpg      File:Monggojf.JPG — Judgefloro — CC BY-SA / CC0
+tortang-talong.jpg       File:580Pastilas Tortang talong 02.jpg — Judgefloro — CC0
+ginisang-sayote.jpg      File:Ginisang sayote at carrots.jpg — FBenjr123 — CC BY-SA 4.0
+ginataang-gulay.jpg      File:Ginataang kalabasa at hipon (...) - Philippines.jpg — Yvette Tan — CC BY 2.0
+sinangag-itlog.jpg       File:Sinangag.jpg — Strawberrysweet07 — CC BY-SA 4.0
+lugaw-itlog.jpg          File:Lugaw.jpg — Elmer B. Domingo — CC BY-SA 4.0
+itlog-maalat-kamatis.jpg File:Salted egg.jpg — ProjectManhattan — CC BY-SA 3.0
+
+The abstract SVGs in this folder (lutong-bahay.svg, tipid.svg, gulay.svg,
+pang-pasko.svg, pang-almusal.svg) are original placeholders used as the
+category fallback for dishes without a photo (e.g. AI-generated suggestions).

@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ---- Carinderia / Fiesta palette ---- */
+    --background: 40 50% 98%; /* #FDFBF7 warm cream */
+    --foreground: 16 42% 15%;
+
+    --card: 40 60% 99%;
+    --card-foreground: 16 42% 15%;
+
+    --popover: 40 60% 99%;
+    --popover-foreground: 16 42% 15%;
+
+    --primary: 9 61% 49%; /* #C84B31 terracotta / fiery clay */
+    --primary-foreground: 40 60% 98%;
+
+    --secondary: 41 83% 79%; /* soft egg yellow */
+    --secondary-foreground: 20 45% 22%;
+
+    --muted: 38 46% 92%;
+    --muted-foreground: 20 16% 42%;
+
+    --accent: 35 78% 66%; /* #ECB365 golden calamansi */
+    --accent-foreground: 20 46% 15%;
+
+    --gold: 44 85% 67%; /* #F4D160 warm egg yellow */
+
+    --leaf: 129 37% 36%; /* #3A7D44 banana leaf */
+    --leaf-foreground: 40 60% 98%;
+    --leaf-bright: 111 44% 43%; /* #4E9F3D success */
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 28 42% 84%;
+    --input: 28 42% 84%;
+    --ring: 9 61% 49%;
+
+    --radius: 1rem;
+
+    --chalkboard: 150 12% 16%;
+
+    --font-display: "Baloo 2", ui-rounded, "Trebuchet MS", "Segoe UI",
+      system-ui, sans-serif;
+  }
+
+  .dark {
+    --background: 20 24% 9%;
+    --foreground: 40 40% 94%;
+
+    --card: 20 22% 12%;
+    --card-foreground: 40 40% 94%;
+
+    --popover: 20 22% 12%;
+    --popover-foreground: 40 40% 94%;
+
+    --primary: 9 68% 56%;
+    --primary-foreground: 20 24% 9%;
+
+    --secondary: 24 20% 22%;
+    --secondary-foreground: 40 40% 94%;
+
+    --muted: 22 16% 18%;
+    --muted-foreground: 36 20% 66%;
+
+    --accent: 35 62% 52%;
+    --accent-foreground: 20 24% 9%;
+
+    --gold: 44 70% 58%;
+
+    --leaf: 129 34% 40%;
+    --leaf-foreground: 40 40% 94%;
+    --leaf-bright: 111 40% 48%;
+
+    --destructive: 0 62% 46%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 22 16% 24%;
+    --input: 22 16% 24%;
+    --ring: 9 68% 56%;
+
+    --chalkboard: 150 10% 12%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* layered fiesta atmosphere: warm glows + woven "solihiya" pattern */
+    background-image:
+      radial-gradient(
+        58rem 42rem at 8% -12%,
+        hsl(35 88% 62% / 0.28),
+        transparent 62%
+      ),
+      radial-gradient(
+        48rem 40rem at 104% 2%,
+        hsl(9 66% 52% / 0.2),
+        transparent 55%
+      ),
+      radial-gradient(
+        46rem 44rem at 50% 118%,
+        hsl(129 42% 40% / 0.16),
+        transparent 60%
+      ),
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='28'%20height='28'%3E%3Cg%20fill='none'%20stroke='%23C84B31'%3E%3Cpath%20d='M0%207h28M0%2021h28M7%200v28M21%200v28'%20stroke-opacity='0.05'%20stroke-width='1.5'/%3E%3Cpath%20d='M0%200l28%2028M28%200L0%2028'%20stroke-opacity='0.03'%20stroke-width='1'/%3E%3C/g%3E%3C/svg%3E");
+    background-attachment: fixed, fixed, fixed, fixed;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  }
+  .dark body {
+    background-image:
+      radial-gradient(
+        58rem 42rem at 8% -12%,
+        hsl(35 60% 40% / 0.22),
+        transparent 62%
+      ),
+      radial-gradient(
+        48rem 40rem at 104% 2%,
+        hsl(9 55% 42% / 0.24),
+        transparent 55%
+      ),
+      radial-gradient(
+        46rem 44rem at 50% 118%,
+        hsl(129 40% 30% / 0.2),
+        transparent 60%
+      ),
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='28'%20height='28'%3E%3Cg%20fill='none'%20stroke='%23ECB365'%3E%3Cpath%20d='M0%207h28M0%2021h28M7%200v28M21%200v28'%20stroke-opacity='0.05'%20stroke-width='1.5'/%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
+@layer components {
+  /* chalk / palengke-board panel */
+  .chalkboard {
+    background-color: hsl(var(--chalkboard));
+    background-image:
+      radial-gradient(
+        transparent,
+        rgba(0, 0, 0, 0.28)
+      ),
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.9'%20numOctaves='2'/%3E%3C/filter%3E%3Crect%20width='120'%20height='120'%20filter='url(%23n)'%20opacity='0.05'/%3E%3C/svg%3E");
+    border-radius: 1.25rem;
+    box-shadow:
+      inset 0 0 0 3px rgba(255, 255, 255, 0.08),
+      inset 0 0 46px rgba(0, 0, 0, 0.4),
+      0 18px 40px -12px rgba(0, 0, 0, 0.45);
+  }
+}

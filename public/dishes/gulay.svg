@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Gulay dish">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f2a950"/>
+      <stop offset="1" stop-color="#c85a2b"/>
+    </linearGradient>
+    <radialGradient id="plate" cx="0.4" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#fff8ef"/>
+      <stop offset="1" stop-color="#e6e2c8"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <circle cx="200" cy="152" r="94" fill="#00000022"/>
+  <circle cx="200" cy="148" r="90" fill="url(#plate)"/>
+  <circle cx="200" cy="148" r="60" fill="#eef0dd"/>
+  <ellipse cx="188" cy="140" rx="14" ry="9" fill="#5f9e39"/>
+  <ellipse cx="212" cy="152" rx="15" ry="9" fill="#4f8c2f"/>
+  <ellipse cx="198" cy="162" rx="12" ry="8" fill="#6cae42"/>
+  <circle cx="214" cy="134" r="6" fill="#e0863a"/>
+  <circle cx="182" cy="156" r="5" fill="#e6b93f"/>
+</svg>
