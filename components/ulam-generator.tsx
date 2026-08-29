@@ -41,6 +41,7 @@ import {
   type GenerateUlamResult,
 } from "@/app/actions/generate-ulam";
 import { streamAiUlam } from "@/app/actions/stream-ulam-ai";
+import { saveAiDishes } from "@/app/actions/save-ai-dishes";
 import { readStreamableValue } from "@ai-sdk/rsc";
 import { MOCK_DISHES, type Dish } from "@/lib/mock-ulam-data";
 
@@ -71,6 +72,7 @@ function offlineGenerateUlam(
     region,
     source: "mock",
     streaming: false,
+    excludeNames: [],
     note: "Offline ka ngayon — ito ang mga ulam mula sa naka-save na listahan.",
     dishes,
   };
@@ -240,22 +242,30 @@ export function UlamGenerator() {
         if (res.streaming) {
           setAiStreaming(true);
           void (async () => {
+            let finalDishes: Dish[] = [];
             try {
               const { object } = await streamAiUlam({
                 budgetPhp: res.budget,
                 region: reg,
-                exclude: res.dishes.map((d) => d.name),
+                exclude: res.excludeNames,
               });
               for await (const chunk of readStreamableValue(object)) {
                 if (streamRunRef.current !== runId) return; // newer search won
                 if (!chunk) continue;
-                if (chunk.dishes.length > 0) setAiStreamDishes(chunk.dishes);
+                if (chunk.dishes.length > 0) {
+                  setAiStreamDishes(chunk.dishes);
+                  finalDishes = chunk.dishes;
+                }
                 if (chunk.done) setAiStreaming(false);
               }
             } catch {
               // keep the placeholder low-cost dishes
             } finally {
               if (streamRunRef.current === runId) setAiStreaming(false);
+            }
+            // persist the new dishes into the catalog (no-op if not configured)
+            if (streamRunRef.current === runId && finalDishes.length > 0) {
+              void saveAiDishes(finalDishes).catch(() => {});
             }
           })();
         }

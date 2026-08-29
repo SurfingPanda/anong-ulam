@@ -28,6 +28,11 @@ export interface GenerateUlamResult {
    * (Gemini key present). The AI dishes are additive, not a replacement.
    */
   streaming?: boolean;
+  /**
+   * Dish names already known for this budget (DB + bundled) — passed to the AI
+   * stream so it doesn't re-propose things we already have.
+   */
+  excludeNames: string[];
   dishes: Dish[];
 }
 
@@ -71,6 +76,7 @@ export async function generateUlam(
       budget: 0,
       region,
       source: "mock",
+      excludeNames: [],
       dishes: [],
     };
   }
@@ -94,12 +100,13 @@ export async function generateUlam(
       region,
       source: "staples",
       streaming: canStream,
+      excludeNames: HYPER_BUDGET_STAPLES.map((d) => d.name),
       note: "Sobrang tipid na budget — pero kaya pa! Tip: magdagdag ng ₱30–₱50 para may maisama nang gulay o karne.",
       dishes: affordable.length > 0 ? affordable : HYPER_BUDGET_STAPLES,
     };
   }
 
-  // 3. Try Supabase
+  // 3. Try Supabase (approved dishes only)
   let dbDishes: Dish[] | null = null;
   if (supabase) {
     try {
@@ -108,9 +115,10 @@ export async function generateUlam(
         .select(
           "id, name, category, est_total_cost, prep_time_mins, servings, instructions, image_url, ingredients(id, dish_id, item_name, amount, unit, est_market_price_php, substitution_name, substitution_savings_php)",
         )
+        .eq("approved", true)
         .lte("est_total_cost", effectiveBudget)
         .order("est_total_cost", { ascending: false })
-        .limit(20);
+        .limit(24);
 
       if (!error && Array.isArray(data)) {
         dbDishes = data as unknown as Dish[];
@@ -124,6 +132,17 @@ export async function generateUlam(
   const pool: Dish[] =
     dbDishes ?? MOCK_DISHES.filter((d) => d.est_total_cost <= effectiveBudget);
   const usingDb = dbDishes !== null;
+
+  // Everything already known in this budget range (DB rows + bundled) — the AI
+  // stream is told to avoid these so it adds genuinely new dishes.
+  const excludeNames = [
+    ...new Set([
+      ...pool.map((d) => d.name),
+      ...MOCK_DISHES.filter((d) => d.est_total_cost <= effectiveBudget).map(
+        (d) => d.name,
+      ),
+    ]),
+  ].slice(0, 40);
 
   // Rank: best use of budget first (highest cost <= budget), quicker cook breaks ties
   const ranked = [...pool]
@@ -147,6 +166,7 @@ export async function generateUlam(
       region,
       source: "mock",
       streaming: canStream,
+      excludeNames,
       note: canStream
         ? "Kaunti ang eksaktong tugma sa budget na ito — ito muna, may dagdag pang ideya ang AI. ✨"
         : "Kakaunti ang direktang tugma sa budget na ito — ito ang pinaka-abot-kayang mga opsyon.",
@@ -160,6 +180,7 @@ export async function generateUlam(
     region,
     source: usingDb ? "database" : "mock",
     streaming: canStream,
+    excludeNames,
     note: canStream
       ? "May dagdag pang ideya ang AI para sa budget na ito. ✨"
       : undefined,

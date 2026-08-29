@@ -132,6 +132,17 @@ npm i ai @ai-sdk/google@ai-v6 @ai-sdk/rsc@ai-v6 zod
 
 Without the key, a pre-configured low-cost default set is returned instead (no stream).
 
+### Persisting AI dishes into the catalog (optional)
+
+With Supabase + a **service-role** key set, `app/actions/save-ai-dishes.ts`
+writes each newly-streamed dish into the `dishes` table (`source = 'ai'`), so it
+shows up **instantly** next time — the catalog grows and AI fires less over
+time. Duplicates are rejected against the bundled data *and* every DB row via
+exact key + containment + trigram similarity (`lib/normalize.ts`), backed by a
+`UNIQUE(name_key)` index (migration `03_ai_dish_persistence.sql`). Malformed /
+hallucinated dishes are filtered by a plausibility check. Full setup:
+**`supabase/ai-persistence.md`**. No service-role key → AI dishes stay ephemeral.
+
 ## How the generator resolves a budget
 
 `app/actions/generate-ulam.ts`:
