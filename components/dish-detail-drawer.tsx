@@ -45,6 +45,20 @@ interface DishDetailDrawerProps {
 const DISCLAIMER =
   "Market prices may vary depending on local wet market (palengke) or supermarket rates.";
 
+/** "Presyo: DA Bantay Presyo · Aug 30, 2026" or a "tantiya lang" note. */
+function priceProvenance(asOf?: string | null): string {
+  if (!asOf) return "Presyo: tantiya lang — walang live na datos ngayon.";
+  const d = new Date(asOf);
+  const when = Number.isNaN(d.getTime())
+    ? asOf
+    : d.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+  return `Presyo: DA Bantay Presyo (NCR) · ${when}`;
+}
+
 const peso2 = (n: number) =>
   `₱${n.toLocaleString("en-PH", {
     minimumFractionDigits: 2,
@@ -356,7 +370,10 @@ export function DishDetailDrawer({
                 </span>
               </li>
             </ul>
-            <p className="mt-2 text-xs italic text-muted-foreground">
+            <p className="mt-2 text-xs font-medium text-muted-foreground">
+              {priceProvenance(dish.price_asof)}
+            </p>
+            <p className="mt-1 text-xs italic text-muted-foreground">
               {DISCLAIMER}
             </p>
           </section>

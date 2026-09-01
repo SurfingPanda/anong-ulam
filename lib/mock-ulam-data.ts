@@ -25,6 +25,12 @@ export interface Ingredient {
   /** Optional "Tipid Swap": a cheaper stand-in and the pesos it saves. */
   substitution_name?: string | null;
   substitution_savings_php?: number | null;
+  /**
+   * Set by `overlayDishPrices()` (lib/market-prices.ts): "market" when
+   * `est_market_price_php` came from a live DA/PSA figure, "estimate" when it's
+   * still the hardcoded guess.
+   */
+  price_source?: "market" | "estimate";
 }
 
 export interface Dish {
@@ -37,6 +43,10 @@ export interface Dish {
   instructions: string[];
   image_url: string | null;
   ingredients: Ingredient[];
+  /** ISO date of the newest live price applied by `overlayDishPrices()`, if any. */
+  price_asof?: string | null;
+  /** "market" = every ingredient live-priced, "mixed" = some, "estimate" = none. */
+  price_source?: "market" | "mixed" | "estimate";
 }
 
 /** Sum ingredient prices — handy when building AI or ad-hoc dishes. */

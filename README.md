@@ -45,7 +45,12 @@ npm run build && npm run start
 2. In the SQL editor run, in order:
    - `supabase/migrations/01_create_ulam_tables.sql` — creates `dishes` +
      `ingredients` with public read RLS policies.
+   - `supabase/migrations/02_add_substitutions.sql`,
+     `supabase/migrations/03_ai_dish_persistence.sql` — Tipid Swaps + AI-dish
+     de-duplication.
    - `supabase/seed.sql` — 10 dishes (₱84–₱488) with itemized palengke prices.
+   - `supabase/migrations/04_market_prices.sql` — optional; the `market_prices`
+     table behind live ingredient prices (see **Live ingredient prices** below).
 3. Copy the project URL + anon key into `.env.local`.
 4. Dish photos ship bundled in `public/dishes/*.jpg` (real photos from Wikimedia
    Commons — see `public/dishes/ATTRIBUTION.txt`). The seed sets each row's
@@ -144,6 +149,22 @@ exact key + containment + trigram similarity (`lib/normalize.ts`), backed by a
 hallucinated dishes are filtered by a plausibility check. Full setup:
 **`supabase/ai-persistence.md`**. No service-role key → AI dishes stay ephemeral.
 
+## Live ingredient prices (optional)
+
+Out of the box, ingredient prices are hardcoded estimates. Wire up the
+`market_prices` table (`supabase/migrations/04_market_prices.sql`) + a
+`CRON_SECRET` and a nightly **Vercel Cron** (`vercel.json`) hits
+`/api/cron/refresh-prices`, which parses the DA "Bantay Presyo" NCR wet-market
+PDFs (weekly + daily) into ~22 commodity prices. `generateUlam()` /
+`streamAiUlam()` then overlay those onto each dish via
+`lib/market-prices.ts` — matching the ingredient name to a commodity, converting
+units (250 g munggo → kg, 1 pc sibuyas → ~100 g, …), and recomputing the total.
+Unmapped or unconvertible ingredients (patis, bagoong, seasonings) keep their
+estimate; the dish drawer shows `Presyo: DA Bantay Presyo (NCR) · <date>`.
+
+Every hop is best-effort: no Supabase, no cron, or a DA site change → the overlay
+no-ops and estimates are used. Full setup + tuning: **`supabase/market-prices.md`**.
+
 ## How the generator resolves a budget
 
 `app/actions/generate-ulam.ts`:
@@ -166,6 +187,7 @@ Results are ranked "best use of budget first"; the UI adds client-side
 app/
   actions/generate-ulam.ts   # server action: {budgetPhp, region} -> ranked raw dishes (+ streaming flag)
   actions/stream-ulam-ai.ts  # server action: streams gemini-3.6-flash dish suggestions
+  api/cron/refresh-prices/   # nightly: DA Bantay Presyo PDFs -> market_prices (Vercel Cron)
   layout.tsx  page.tsx  globals.css
 components/
   ui/                        # button, input, badge, card, sheet, checkbox
@@ -190,6 +212,9 @@ hooks/
 lib/
   mock-ulam-data.ts          # bundled dataset (mirrors seed) + hyper-budget staples + swaps
   pricing-engine.ts          # priceDish(): servings + price-mode + region + pantry + swap math
+  market-prices.ts           # commodity catalog + matchCommodity() + unit conv + overlayDishPrices()
+  market-prices.server.ts    # loadMarketPrices(): freshest market_prices rows, 10-min cache
+  sources/da.ts  sources/refresh.ts  # DA PDF fetch+parse + refresh orchestrator
   pantry.ts                  # PANTRY_GROUPS + ingredientInPantry()
   ulam-filters.ts            # craving/mood FilterDef predicates
   market-sections.ts         # ingredient -> Karnehan / Isdaan / Gulayan / Pampalasa

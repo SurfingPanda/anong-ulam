@@ -8,6 +8,8 @@ import {
 } from "@/lib/mock-ulam-data";
 import { regionMultiplier, type RegionId } from "@/lib/pricing-engine";
 import { geminiConfigured } from "@/lib/gemini";
+import { overlayDishesPrices } from "@/lib/market-prices";
+import { loadMarketPrices } from "@/lib/market-prices.server";
 
 export type UlamSource = "database" | "mock" | "ai" | "staples";
 
@@ -34,6 +36,11 @@ export interface GenerateUlamResult {
    */
   excludeNames: string[];
   dishes: Dish[];
+  /**
+   * Newest `as_of` (ISO date) among the live DA/PSA prices applied to `dishes`,
+   * or null when everything is still a hardcoded estimate.
+   */
+  priceAsOf?: string | null;
 }
 
 const HYPER_BUDGET_THRESHOLD = 50; // ₱ — below this we suggest staples only
@@ -95,10 +102,24 @@ export async function generateUlam(
   // NCR-priced ingredients. Dishes are filtered against this stretched figure.
   const effectiveBudget = Math.round(roundedBudget / regionMultiplier(region));
 
+  // Live DA/PSA prices (empty map when Supabase / the cron aren't set up — then
+  // `overlayDishesPrices` is a no-op and every price stays the hardcoded guess).
+  const marketByKey = await loadMarketPrices();
+  const withMarket = (dishes: Dish[]): Dish[] =>
+    overlayDishesPrices(dishes, marketByKey);
+  const latestAsOf = (dishes: Dish[]): string | null =>
+    dishes.reduce<string | null>(
+      (m, d) => (d.price_asof && (!m || d.price_asof > m) ? d.price_asof : m),
+      null,
+    );
+
   // 2. Edge case: hyper-low budget — only 3 staples, so AI always helps here.
   if (roundedBudget < HYPER_BUDGET_THRESHOLD) {
     const affordable = HYPER_BUDGET_STAPLES.filter(
       (d) => d.est_total_cost <= effectiveBudget,
+    );
+    const dishes = withMarket(
+      affordable.length > 0 ? affordable : HYPER_BUDGET_STAPLES,
     );
     return {
       ok: true,
@@ -108,7 +129,8 @@ export async function generateUlam(
       streaming: geminiConfigured,
       excludeNames: HYPER_BUDGET_STAPLES.map((d) => d.name),
       note: "Sobrang tipid na budget — pero kaya pa! Tip: magdagdag ng ₱30–₱50 para may maisama nang gulay o karne.",
-      dishes: affordable.length > 0 ? affordable : HYPER_BUDGET_STAPLES,
+      dishes,
+      priceAsOf: latestAsOf(dishes),
     };
   }
 
@@ -156,21 +178,27 @@ export async function generateUlam(
   const canStream =
     geminiConfigured && affordable.length < AI_STREAM_THRESHOLD;
 
-  // Rank: best use of budget first (highest cost <= budget), quicker cook breaks ties
-  const ranked = [...affordable]
-    .sort(
-      (a, b) =>
-        b.est_total_cost - a.est_total_cost ||
-        a.prep_time_mins - b.prep_time_mins,
-    )
-    .slice(0, MAX_RESULTS);
+  // Rank: best use of budget first (highest cost <= budget), quicker cook breaks
+  // ties. Live prices are overlaid first, then we rank on the real total.
+  const ranked = withMarket(
+    [...affordable]
+      .sort(
+        (a, b) =>
+          b.est_total_cost - a.est_total_cost ||
+          a.prep_time_mins - b.prep_time_mins,
+      )
+      .slice(0, MAX_RESULTS),
+  ).sort(
+    (a, b) =>
+      b.est_total_cost - a.est_total_cost || a.prep_time_mins - b.prep_time_mins,
+  );
 
   // 5. Too few exact matches -> show the 3 cheapest as a starting point.
   //    The AI stream (below, when configured) fills the rest of the grid.
   if (ranked.length < SPARSE_THRESHOLD) {
-    const defaults = [...MOCK_DISHES]
-      .sort((a, b) => a.est_total_cost - b.est_total_cost)
-      .slice(0, 3);
+    const defaults = withMarket(
+      [...MOCK_DISHES].sort((a, b) => a.est_total_cost - b.est_total_cost).slice(0, 3),
+    );
     return {
       ok: true,
       budget: roundedBudget,
@@ -182,6 +210,7 @@ export async function generateUlam(
         ? "Kaunti ang eksaktong tugma sa budget na ito — ito muna, may dagdag pang ideya ang AI. ✨"
         : "Kakaunti ang direktang tugma sa budget na ito — ito ang pinaka-abot-kayang mga opsyon.",
       dishes: defaults,
+      priceAsOf: latestAsOf(defaults),
     };
   }
 
@@ -196,5 +225,6 @@ export async function generateUlam(
       ? "May dagdag pang ideya ang AI para sa budget na ito. ✨"
       : undefined,
     dishes: ranked,
+    priceAsOf: latestAsOf(ranked),
   };
 }

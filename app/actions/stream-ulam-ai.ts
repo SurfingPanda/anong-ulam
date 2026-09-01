@@ -6,6 +6,8 @@ import { createStreamableValue } from "@ai-sdk/rsc";
 import { geminiUlamModel } from "@/lib/gemini";
 import { aiUlamSchema, aiUlamPrompt, aiPartialToDish } from "@/lib/ai-ulam";
 import type { Dish } from "@/lib/mock-ulam-data";
+import { overlayDishesPrices } from "@/lib/market-prices";
+import { loadMarketPrices } from "@/lib/market-prices.server";
 
 export interface StreamAiUlamInput {
   budgetPhp: number;
@@ -29,6 +31,7 @@ export async function streamAiUlam({
   });
 
   (async () => {
+    const marketByKey = await loadMarketPrices();
     let latest: Dish[] = [];
     try {
       const { partialObjectStream } = streamObject({
@@ -38,9 +41,12 @@ export async function streamAiUlam({
       });
 
       for await (const partial of partialObjectStream) {
-        const dishes = (partial.dishes ?? [])
-          .map((d, i) => aiPartialToDish(d, i))
-          .filter((d): d is Dish => d !== null);
+        const dishes = overlayDishesPrices(
+          (partial.dishes ?? [])
+            .map((d, i) => aiPartialToDish(d, i))
+            .filter((d): d is Dish => d !== null),
+          marketByKey,
+        );
         if (dishes.length >= latest.length) {
           latest = dishes;
           stream.update({ dishes, done: false });
