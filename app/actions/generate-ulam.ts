@@ -47,6 +47,14 @@ const HYPER_BUDGET_THRESHOLD = 50; // ₱ — below this we suggest staples only
 const MAX_RESULTS = 6;
 const SPARSE_THRESHOLD = 2; // fewer than this triggers the low-cost default set
 /**
+ * The DB/pool pre-filter runs on the hardcoded `est_total_cost`, but live DA
+ * prices can move a dish's real total either way before we filter for keeps.
+ * Fetch this much over budget so a dish that live prices bring *under* budget
+ * isn't dropped before the overlay; the exact `<= effectiveBudget` check then
+ * runs on the overlaid total.
+ */
+const BUDGET_FETCH_MARGIN = 1.35;
+/**
  * Only stream extra AI dishes when the catalog has FEWER than this many
  * affordable dishes for the budget. Once a budget bracket fills up, searches
  * there are fully instant (no AI wait). Set to a higher number to keep AI
@@ -115,12 +123,9 @@ export async function generateUlam(
 
   // 2. Edge case: hyper-low budget — only 3 staples, so AI always helps here.
   if (roundedBudget < HYPER_BUDGET_THRESHOLD) {
-    const affordable = HYPER_BUDGET_STAPLES.filter(
-      (d) => d.est_total_cost <= effectiveBudget,
-    );
-    const dishes = withMarket(
-      affordable.length > 0 ? affordable : HYPER_BUDGET_STAPLES,
-    );
+    const priced = withMarket(HYPER_BUDGET_STAPLES);
+    const affordable = priced.filter((d) => d.est_total_cost <= effectiveBudget);
+    const dishes = affordable.length > 0 ? affordable : priced;
     return {
       ok: true,
       budget: roundedBudget,
@@ -144,7 +149,7 @@ export async function generateUlam(
           "id, name, category, est_total_cost, prep_time_mins, servings, instructions, image_url, ingredients(id, dish_id, item_name, amount, unit, est_market_price_php, substitution_name, substitution_savings_php)",
         )
         .eq("approved", true)
-        .lte("est_total_cost", effectiveBudget)
+        .lte("est_total_cost", Math.round(effectiveBudget * BUDGET_FETCH_MARGIN))
         .order("est_total_cost", { ascending: false })
         .limit(24);
 
@@ -156,42 +161,49 @@ export async function generateUlam(
     }
   }
 
-  // 4. Fall back to bundled data when the DB is not available
+  // 4. Fall back to bundled data when the DB is not available. Pre-filter with
+  //    the fetch margin (not the exact budget) — the real cut happens after the
+  //    live-price overlay below.
   const pool: Dish[] =
-    dbDishes ?? MOCK_DISHES.filter((d) => d.est_total_cost <= effectiveBudget);
+    dbDishes ??
+    MOCK_DISHES.filter(
+      (d) => d.est_total_cost <= effectiveBudget * BUDGET_FETCH_MARGIN,
+    );
   const usingDb = dbDishes !== null;
+
+  // Overlay live DA/PSA prices onto the whole pool BEFORE the budget cut, so the
+  // filter, the AI-stream trigger, and the ranking all see each dish's real
+  // total — not the hardcoded estimate.
+  const pricedPool = withMarket(pool);
 
   // Everything already known in this budget range (DB rows + bundled) — the AI
   // stream is told to avoid these so it adds genuinely new dishes.
   const excludeNames = [
     ...new Set([
-      ...pool.map((d) => d.name),
+      ...pricedPool.map((d) => d.name),
       ...MOCK_DISHES.filter((d) => d.est_total_cost <= effectiveBudget).map(
         (d) => d.name,
       ),
     ]),
   ].slice(0, 40);
 
-  const affordable = pool.filter((d) => d.est_total_cost <= effectiveBudget);
+  const affordable = pricedPool.filter(
+    (d) => d.est_total_cost <= effectiveBudget,
+  );
 
   // Only stream AI when this budget bracket is still thin in the catalog.
   const canStream =
     geminiConfigured && affordable.length < AI_STREAM_THRESHOLD;
 
-  // Rank: best use of budget first (highest cost <= budget), quicker cook breaks
-  // ties. Live prices are overlaid first, then we rank on the real total.
-  const ranked = withMarket(
-    [...affordable]
-      .sort(
-        (a, b) =>
-          b.est_total_cost - a.est_total_cost ||
-          a.prep_time_mins - b.prep_time_mins,
-      )
-      .slice(0, MAX_RESULTS),
-  ).sort(
-    (a, b) =>
-      b.est_total_cost - a.est_total_cost || a.prep_time_mins - b.prep_time_mins,
-  );
+  // Rank: best use of budget first (highest real total <= budget), quicker cook
+  // breaks ties.
+  const ranked = [...affordable]
+    .sort(
+      (a, b) =>
+        b.est_total_cost - a.est_total_cost ||
+        a.prep_time_mins - b.prep_time_mins,
+    )
+    .slice(0, MAX_RESULTS);
 
   // 5. Too few exact matches -> show the 3 cheapest as a starting point.
   //    The AI stream (below, when configured) fills the rest of the grid.

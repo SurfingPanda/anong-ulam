@@ -5,7 +5,7 @@
  */
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { fetchDaWeekly, fetchDaDaily } from "@/lib/sources/da";
+import { fetchDaPrices } from "@/lib/sources/da";
 import type { RawMarketPrice } from "@/lib/sources/types";
 
 export interface RefreshResult {
@@ -28,10 +28,7 @@ export async function refreshMarketPrices(): Promise<RefreshResult> {
     };
   }
 
-  const settled = await Promise.allSettled([fetchDaWeekly(), fetchDaDaily()]);
-  const raw: RawMarketPrice[] = settled.flatMap((s) =>
-    s.status === "fulfilled" ? s.value : [],
-  );
+  const raw: RawMarketPrice[] = await fetchDaPrices();
 
   // dedupe on the table's unique key
   const seen = new Set<string>();

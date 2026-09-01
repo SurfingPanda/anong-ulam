@@ -52,17 +52,27 @@ export function asOfFromDailyName(name: string): string | null {
   return isoDate(Number(m[3]), mon, Number(m[2]));
 }
 
+/**
+ * DA has published this file under a few slug spellings over time
+ * ("Weekly-Average-Prices-…", "Weekly-Average-Retail-Price-…"); match them all
+ * so a rename on their end doesn't silently zero out the feed.
+ */
+const WEEKLY_SLUG_RE = /Weekly-Average(?:-Retail)?-Prices?-/i;
+const DAILY_SLUG_RE = /Daily-Price-Index-/i;
+
 async function scrapeListing(): Promise<{ weekly?: string; daily?: string }> {
   const res = await fetch(LISTING_URL, { headers: { "User-Agent": UA } });
   if (!res.ok) throw new Error(`listing ${res.status}`);
   const html = await res.text();
   const re =
-    /href="(https:\/\/www\.da\.gov\.ph\/wp-content\/uploads\/[^"]+\/(Weekly-Average-Prices|Daily-Price-Index)-[^"]+\.pdf)"/gi;
+    /href="(https:\/\/www\.da\.gov\.ph\/wp-content\/uploads\/[^"]+\.pdf)"/gi;
   let weekly: string | undefined;
   let daily: string | undefined;
   for (const m of html.matchAll(re)) {
-    if (m[2] === "Weekly-Average-Prices" && !weekly) weekly = m[1];
-    if (m[2] === "Daily-Price-Index" && !daily) daily = m[1];
+    const url = m[1];
+    const file = url.split("/").pop() ?? "";
+    if (!weekly && WEEKLY_SLUG_RE.test(file)) weekly = url;
+    else if (!daily && DAILY_SLUG_RE.test(file)) daily = url;
     if (weekly && daily) break;
   }
   return { weekly, daily };
@@ -207,32 +217,44 @@ async function fetchPdfLines(url: string): Promise<Line[]> {
   return pdfToLines(buf);
 }
 
-export async function fetchDaWeekly(): Promise<RawMarketPrice[]> {
+/** Fetch one PDF and turn it into price rows; never throws. */
+async function fetchOne(
+  url: string | undefined,
+  kind: "weekly" | "daily",
+  source: RawMarketPrice["source"],
+  asOfFromName: (name: string) => string | null,
+): Promise<RawMarketPrice[]> {
+  if (!url) {
+    console.error(`[da] no ${kind} PDF link found`);
+    return [];
+  }
   try {
-    const { weekly } = await scrapeListing();
-    if (!weekly) throw new Error("no weekly PDF link found");
-    const asOf =
-      asOfFromWeeklyName(weekly) ?? new Date().toISOString().slice(0, 10);
-    const rows = parseDaLines(await fetchPdfLines(weekly), asOf, "da-weekly");
-    console.log(`[da] weekly ${weekly.split("/").pop()} -> ${rows.length} commodities`);
+    const asOf = asOfFromName(url) ?? new Date().toISOString().slice(0, 10);
+    const rows = parseDaLines(await fetchPdfLines(url), asOf, source);
+    console.log(`[da] ${kind} ${url.split("/").pop()} -> ${rows.length} commodities`);
     return rows;
   } catch (err) {
-    console.error("[da] weekly fetch failed:", err);
+    console.error(`[da] ${kind} fetch failed:`, err);
     return [];
   }
 }
 
-export async function fetchDaDaily(): Promise<RawMarketPrice[]> {
+/**
+ * Both DA feeds (weekly + daily) from a single listing scrape. Best-effort: a
+ * failure in either half returns `[]` for that half, never throws.
+ */
+export async function fetchDaPrices(): Promise<RawMarketPrice[]> {
+  let listing: { weekly?: string; daily?: string };
   try {
-    const { daily } = await scrapeListing();
-    if (!daily) throw new Error("no daily PDF link found");
-    const asOf =
-      asOfFromDailyName(daily) ?? new Date().toISOString().slice(0, 10);
-    const rows = parseDaLines(await fetchPdfLines(daily), asOf, "da-daily");
-    console.log(`[da] daily ${daily.split("/").pop()} -> ${rows.length} commodities`);
-    return rows;
+    listing = await scrapeListing();
   } catch (err) {
-    console.error("[da] daily fetch failed:", err);
+    console.error("[da] listing scrape failed:", err);
     return [];
   }
+
+  const [weekly, daily] = await Promise.all([
+    fetchOne(listing.weekly, "weekly", "da-weekly", asOfFromWeeklyName),
+    fetchOne(listing.daily, "daily", "da-daily", asOfFromDailyName),
+  ]);
+  return [...weekly, ...daily];
 }
