@@ -38,7 +38,14 @@ export interface GenerateUlamResult {
 
 const HYPER_BUDGET_THRESHOLD = 50; // ₱ — below this we suggest staples only
 const MAX_RESULTS = 6;
-const SPARSE_THRESHOLD = 2; // fewer than this triggers the AI / default fallback
+const SPARSE_THRESHOLD = 2; // fewer than this triggers the low-cost default set
+/**
+ * Only stream extra AI dishes when the catalog has FEWER than this many
+ * affordable dishes for the budget. Once a budget bracket fills up, searches
+ * there are fully instant (no AI wait). Set to a higher number to keep AI
+ * contributing longer.
+ */
+const AI_STREAM_THRESHOLD = 5;
 
 const VALIDATION_ERROR = "Please enter a valid budget in PHP.";
 
@@ -50,11 +57,13 @@ const VALIDATION_ERROR = "Please enter a valid budget in PHP.";
  *
  * Resolution order:
  *   1. Validate the budget (zero / negative / NaN -> error).
- *   2. Budget < ₱50 -> hyper-budget staples + stretch tip.
- *   3. Query Supabase (if configured) for dishes at or under budget.
+ *   2. Budget < ₱50 -> hyper-budget staples + stretch tip (AI streams if on).
+ *   3. Query Supabase (approved rows) for dishes at or under budget.
  *   4. Fall back to the bundled mock dataset when the DB is unavailable.
- *   5. If results are still sparse -> AI generation (if OPENAI_API_KEY set),
- *      otherwise a pre-configured low-cost default set.
+ *   5. `streaming` is set only when Gemini is configured AND the catalog has
+ *      fewer than AI_STREAM_THRESHOLD affordable dishes for this budget — so a
+ *      full bracket is served instantly with no AI wait.
+ *   6. If almost nothing matches -> also show the 3 cheapest bundled dishes.
  */
 export async function generateUlam(
   budgetInput:
@@ -86,10 +95,7 @@ export async function generateUlam(
   // NCR-priced ingredients. Dishes are filtered against this stretched figure.
   const effectiveBudget = Math.round(roundedBudget / regionMultiplier(region));
 
-  // Gemini configured -> every result also streams extra AI dishes on top.
-  const canStream = geminiConfigured;
-
-  // 2. Edge case: hyper-low budget
+  // 2. Edge case: hyper-low budget — only 3 staples, so AI always helps here.
   if (roundedBudget < HYPER_BUDGET_THRESHOLD) {
     const affordable = HYPER_BUDGET_STAPLES.filter(
       (d) => d.est_total_cost <= effectiveBudget,
@@ -99,7 +105,7 @@ export async function generateUlam(
       budget: roundedBudget,
       region,
       source: "staples",
-      streaming: canStream,
+      streaming: geminiConfigured,
       excludeNames: HYPER_BUDGET_STAPLES.map((d) => d.name),
       note: "Sobrang tipid na budget — pero kaya pa! Tip: magdagdag ng ₱30–₱50 para may maisama nang gulay o karne.",
       dishes: affordable.length > 0 ? affordable : HYPER_BUDGET_STAPLES,
@@ -144,9 +150,14 @@ export async function generateUlam(
     ]),
   ].slice(0, 40);
 
+  const affordable = pool.filter((d) => d.est_total_cost <= effectiveBudget);
+
+  // Only stream AI when this budget bracket is still thin in the catalog.
+  const canStream =
+    geminiConfigured && affordable.length < AI_STREAM_THRESHOLD;
+
   // Rank: best use of budget first (highest cost <= budget), quicker cook breaks ties
-  const ranked = [...pool]
-    .filter((d) => d.est_total_cost <= effectiveBudget)
+  const ranked = [...affordable]
     .sort(
       (a, b) =>
         b.est_total_cost - a.est_total_cost ||

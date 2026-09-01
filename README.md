@@ -107,23 +107,24 @@ From the dish drawer:
   `<canvas>` ("Niluto ang {dish} para sa {N} tao sa ₱{price} lang! #AnongUlam")
   with **download**, **copy caption**, and native **Share** (`navigator.share`).
 
-## AI extra dishes (optional, always-on, streamed & additive)
+## AI extra dishes (optional, streamed & additive)
 
-When `GOOGLE_GENERATIVE_AI_API_KEY` is set, **every** search returns its dataset
-matches **instantly** and also carries `streaming: true`. The client then calls
-**`streamAiUlam()`** (`app/actions/stream-ulam-ai.ts`) — `streamObject` +
-`@ai-sdk/rsc`'s `createStreamableValue` — which streams 3 more
-`gemini-3.6-flash` dishes **on top of** the dataset results (the prompt is told
-which dish names are already on screen so it adds variety, not duplicates).
+When `GOOGLE_GENERATIVE_AI_API_KEY` is set **and** the catalog has fewer than
+`AI_STREAM_THRESHOLD` (5) affordable dishes for the budget, the result carries
+`streaming: true`. The client then calls **`streamAiUlam()`**
+(`app/actions/stream-ulam-ai.ts`) — `streamObject` + `@ai-sdk/rsc`'s
+`createStreamableValue` — which streams 3 more `gemini-3.6-flash` dishes **on
+top of** the instant results (the prompt gets up to 40 already-known names so it
+adds variety, not duplicates).
 
-Each AI dish is deduped by name and merged into the grid the moment it's
-complete (`lib/ai-ulam.ts` → `aiPartialToDish`), sorting in by price like any
-other dish. No blank wait: first paint ~70 ms, AI dishes land over the next
-~10 s with a *"nagluluto ang AI…"* pill + skeleton placeholders. A ₱250 search
-goes from 6 dataset dishes to ~9.
+Each AI dish is deduped and merged into the grid the moment it's complete
+(`lib/ai-ulam.ts` → `aiPartialToDish`), sorting in by price. First paint ~70 ms;
+AI dishes trickle in over ~10 s with a *"nagluluto ang AI…"* pill.
 
-Cost: one Gemini call per search. Free tier (15 req/min, ~1,500/day) covers
-normal use comfortably.
+**Self-throttling:** once a budget bracket has ≥ 5 dishes (persisted AI dishes
+count — see below), searches there fire **no AI at all** and are fully instant.
+Raise `AI_STREAM_THRESHOLD` in `app/actions/generate-ulam.ts` to keep AI
+contributing longer.
 
 ```bash
 npm i ai @ai-sdk/google@ai-v6 @ai-sdk/rsc@ai-v6 zod
