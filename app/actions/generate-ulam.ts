@@ -35,6 +35,12 @@ export interface GenerateUlamResult {
    * stream so it doesn't re-propose things we already have.
    */
   excludeNames: string[];
+  /**
+   * True when the caller's `exclude` list has swept up every catalog dish for
+   * this budget and no AI fallback is available — the "Ibang ulam naman" button
+   * has nothing left to show and should offer a reset instead.
+   */
+  exhausted?: boolean;
   dishes: Dish[];
   /**
    * Newest `as_of` (ISO date) among the live DA/PSA prices applied to `dishes`,
@@ -79,17 +85,35 @@ const VALIDATION_ERROR = "Please enter a valid budget in PHP.";
  *      fewer than AI_STREAM_THRESHOLD affordable dishes for this budget — so a
  *      full bracket is served instantly with no AI wait.
  *   6. If almost nothing matches -> also show the 3 cheapest bundled dishes.
+ *
+ * `exclude` (dish names the caller has already shown) powers the "Ibang ulam
+ * naman" refresh button: those dishes are dropped before ranking, so each press
+ * returns a different set and rolls over to the AI stream once the catalog runs
+ * out. When even that is exhausted the result carries `exhausted: true`.
  */
 export async function generateUlam(
   budgetInput:
     | number
     | string
-    | { budgetPhp: number | string; region?: RegionId },
+    | {
+        budgetPhp: number | string;
+        region?: RegionId;
+        /** Dish names the caller has already shown — excluded so "Ibang ulam
+         *  naman" returns a genuinely different set each press. */
+        exclude?: string[];
+      },
 ): Promise<GenerateUlamResult> {
   const raw =
     typeof budgetInput === "object" ? budgetInput.budgetPhp : budgetInput;
   const region: RegionId =
     (typeof budgetInput === "object" && budgetInput.region) || "ncr";
+  const exclude = new Set(
+    (typeof budgetInput === "object" && Array.isArray(budgetInput.exclude)
+      ? budgetInput.exclude
+      : []
+    ).map((n) => n.trim().toLowerCase()),
+  );
+  const isSeen = (d: Dish) => exclude.has(d.name.trim().toLowerCase());
   const budget = typeof raw === "number" ? raw : Number(raw);
 
   // 1. Validation — zero, negative, empty, or non-numeric
@@ -151,7 +175,7 @@ export async function generateUlam(
         .eq("approved", true)
         .lte("est_total_cost", Math.round(effectiveBudget * BUDGET_FETCH_MARGIN))
         .order("est_total_cost", { ascending: false })
-        .limit(24);
+        .limit(48);
 
       if (!error && Array.isArray(data)) {
         dbDishes = data as unknown as Dish[];
@@ -176,28 +200,34 @@ export async function generateUlam(
   // total — not the hardcoded estimate.
   const pricedPool = withMarket(pool);
 
-  // Everything already known in this budget range (DB rows + bundled) — the AI
-  // stream is told to avoid these so it adds genuinely new dishes.
+  // Everything already known in this budget range (DB rows + bundled) plus the
+  // caller's own "already shown" list — the AI stream avoids all of it.
   const excludeNames = [
     ...new Set([
+      ...exclude,
       ...pricedPool.map((d) => d.name),
       ...MOCK_DISHES.filter((d) => d.est_total_cost <= effectiveBudget).map(
         (d) => d.name,
       ),
     ]),
-  ].slice(0, 40);
+  ].slice(0, 60);
 
   const affordable = pricedPool.filter(
     (d) => d.est_total_cost <= effectiveBudget,
   );
+  // Drop what the caller has already seen ("Ibang ulam naman"). On a first
+  // search `exclude` is empty, so this is a no-op.
+  const unseen = affordable.filter((d) => !isSeen(d));
 
-  // Only stream AI when this budget bracket is still thin in the catalog.
+  // Stream AI when the *unseen* catalog can't fill a page — either the bracket
+  // is thin to begin with, or refreshes have used it up.
   const canStream =
-    geminiConfigured && affordable.length < AI_STREAM_THRESHOLD;
+    geminiConfigured &&
+    (unseen.length < AI_STREAM_THRESHOLD || unseen.length < MAX_RESULTS);
 
   // Rank: best use of budget first (highest real total <= budget), quicker cook
   // breaks ties.
-  const ranked = [...affordable]
+  const ranked = [...unseen]
     .sort(
       (a, b) =>
         b.est_total_cost - a.est_total_cost ||
@@ -209,8 +239,25 @@ export async function generateUlam(
   //    The AI stream (below, when configured) fills the rest of the grid.
   if (ranked.length < SPARSE_THRESHOLD) {
     const defaults = withMarket(
-      [...MOCK_DISHES].sort((a, b) => a.est_total_cost - b.est_total_cost).slice(0, 3),
+      [...MOCK_DISHES]
+        .filter((d) => !isSeen(d))
+        .sort((a, b) => a.est_total_cost - b.est_total_cost)
+        .slice(0, 3),
     );
+    // Nothing new to show and no AI to fall back on -> tell the client to reset.
+    if (defaults.length === 0 && !canStream) {
+      return {
+        ok: true,
+        budget: roundedBudget,
+        region,
+        source: usingDb ? "database" : "mock",
+        streaming: false,
+        excludeNames,
+        exhausted: true,
+        note: "Naipakita na ang lahat ng ulam sa listahan para sa budget na ito. I-reset para makita ulit mula sa simula.",
+        dishes: [],
+      };
+    }
     return {
       ok: true,
       budget: roundedBudget,

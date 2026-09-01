@@ -10,6 +10,7 @@ import {
   Timer,
   Target,
   ClipboardList,
+  RefreshCw,
 } from "lucide-react";
 
 import { BudgetForm } from "@/components/budget-form";
@@ -104,6 +105,9 @@ export function UlamGenerator() {
   const [priceMode, setPriceMode] = React.useState<PriceMode>("palengke");
   const [region, setRegion] = React.useState<RegionId>("ncr");
   const [lastBudget, setLastBudget] = React.useState<number | null>(null);
+  // Every dish name shown so far for the current budget/region — sent back on
+  // "Ibang ulam naman" so each refresh returns a different set.
+  const [seenNames, setSeenNames] = React.useState<string[]>([]);
   const [servingsByDish, setServingsByDish] = React.useState<
     Record<string, number>
   >({});
@@ -203,7 +207,12 @@ export function UlamGenerator() {
   }, [result, activeDishes, selectedIds, pricedMap, servingsFor]);
 
   const runSearch = React.useCallback(
-    (budget: number, reg: RegionId, freshDishSet: boolean) => {
+    (
+      budget: number,
+      reg: RegionId,
+      freshDishSet: boolean,
+      exclude: string[] = [],
+    ) => {
       setError(null);
       if (freshDishSet) {
         setServingsByDish({});
@@ -219,7 +228,7 @@ export function UlamGenerator() {
       startTransition(async () => {
         let res: GenerateUlamResult;
         try {
-          res = await generateUlam({ budgetPhp: budget, region: reg });
+          res = await generateUlam({ budgetPhp: budget, region: reg, exclude });
         } catch {
           // server action unreachable (offline) -> local dataset fallback
           res = offlineGenerateUlam(budget, reg);
@@ -230,6 +239,12 @@ export function UlamGenerator() {
           return;
         }
         setResult(res);
+        // Remember what we just showed so the next refresh skips it.
+        if (res.dishes.length > 0) {
+          setSeenNames((prev) => [
+            ...new Set([...prev, ...res.dishes.map((d) => d.name)]),
+          ]);
+        }
         if (freshDishSet) {
           requestAnimationFrame(() => {
             resultsRef.current?.scrollIntoView({
@@ -265,6 +280,9 @@ export function UlamGenerator() {
             }
             // persist the new dishes into the catalog (no-op if not configured)
             if (streamRunRef.current === runId && finalDishes.length > 0) {
+              setSeenNames((prev) => [
+                ...new Set([...prev, ...finalDishes.map((d) => d.name)]),
+              ]);
               void saveAiDishes(finalDishes).catch(() => {});
             }
           })();
@@ -276,13 +294,29 @@ export function UlamGenerator() {
 
   function handleSearch(budget: number) {
     setLastBudget(budget);
+    setSeenNames([]);
     runSearch(budget, region, true);
   }
 
   function handleRegionChange(next: RegionId) {
     setRegion(next);
-    // Region changes the affordable set -> re-query the backend.
-    if (lastBudget !== null) runSearch(lastBudget, next, false);
+    // Region changes the affordable set -> re-query from scratch.
+    if (lastBudget !== null) {
+      setSeenNames([]);
+      runSearch(lastBudget, next, false);
+    }
+  }
+
+  // "Ibang ulam naman" — same budget, a different set of dishes.
+  function handleRefresh() {
+    if (lastBudget === null || isPending) return;
+    runSearch(lastBudget, region, true, seenNames);
+  }
+
+  function handleResetSeen() {
+    if (lastBudget === null) return;
+    setSeenNames([]);
+    runSearch(lastBudget, region, true, []);
   }
 
   function handleServingsChange(id: string, next: number) {
@@ -361,7 +395,9 @@ export function UlamGenerator() {
           <section className="mx-auto mt-12 max-w-5xl" aria-live="polite">
             <div className="mb-4 text-center">
               <h2 className="font-display text-3xl font-extrabold text-foreground sm:text-4xl">
-                {result.source === "staples" ? (
+                {result.exhausted ? (
+                  <>Wala nang bagong ulam</>
+                ) : result.source === "staples" ? (
                   <>Mga staples para sa {formatPHP(result.budget)}</>
                 ) : (
                   <>
@@ -394,31 +430,51 @@ export function UlamGenerator() {
               </p>
             ) : null}
 
-            <div className="mb-4">
-              <UlamFilters active={filters} onChange={setFilters} />
-            </div>
-
-            <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
-              <span className="font-display text-sm font-bold text-muted-foreground">
-                Ayusin ayon sa:
-              </span>
-              {SORTS.map(({ key, label, icon: Icon }) => (
+            {!result.exhausted ? (
+              <div className="mb-6 flex justify-center">
                 <button
-                  key={key}
                   type="button"
-                  onClick={() => setSortKey(key)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 font-display text-sm font-extrabold transition-all",
-                    sortKey === key
-                      ? "-translate-y-0.5 border-primary bg-primary text-primary-foreground shadow-pop-sm"
-                      : "border-primary/20 bg-card text-foreground hover:border-primary/50",
-                  )}
+                  onClick={handleRefresh}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-primary/30 bg-card px-5 py-2.5 font-display text-sm font-extrabold text-foreground shadow-pop-sm transition-all hover:-translate-y-0.5 hover:border-primary/60 active:translate-y-0.5 active:shadow-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Icon className="h-4 w-4" />
-                  {label}
+                  <RefreshCw
+                    className={cn("h-4 w-4", isPending && "animate-spin")}
+                  />
+                  {isPending ? "Naghahanap…" : "Ibang ulam naman"}
                 </button>
-              ))}
-            </div>
+              </div>
+            ) : null}
+
+            {!result.exhausted ? (
+              <>
+                <div className="mb-4">
+                  <UlamFilters active={filters} onChange={setFilters} />
+                </div>
+
+                <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
+                  <span className="font-display text-sm font-bold text-muted-foreground">
+                    Ayusin ayon sa:
+                  </span>
+                  {SORTS.map(({ key, label, icon: Icon }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSortKey(key)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 font-display text-sm font-extrabold transition-all",
+                        sortKey === key
+                          ? "-translate-y-0.5 border-primary bg-primary text-primary-foreground shadow-pop-sm"
+                          : "border-primary/20 bg-card text-foreground hover:border-primary/50",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
 
             {selectedIds.length > 0 ? (
               <div className="mb-6 flex justify-center">
@@ -433,10 +489,27 @@ export function UlamGenerator() {
               </div>
             ) : null}
 
-            {visibleDishes.length === 0 ? (
+            {result.exhausted ? (
+              <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/25 bg-card/60 p-8 text-center">
+                <span className="text-4xl">🍽️</span>
+                <p className="text-sm font-semibold text-muted-foreground">
+                  {result.note}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResetSeen}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-display text-sm font-extrabold text-primary-foreground shadow-pop transition-transform hover:brightness-105 active:translate-y-1 active:shadow-pop-sm disabled:opacity-60"
+                >
+                  <RefreshCw className={cn("h-4 w-4", isPending && "animate-spin")} />
+                  Magsimula ulit
+                </button>
+              </div>
+            ) : visibleDishes.length === 0 && !aiStreaming ? (
               <p className="mx-auto max-w-md rounded-2xl border-2 border-dashed border-primary/25 bg-card/60 p-6 text-center text-sm font-semibold text-muted-foreground">
-                Walang ulam na tumutugma sa mga napiling filter. Subukang
-                bawasan ang filter.
+                {filters.length > 0
+                  ? "Walang ulam na tumutugma sa mga napiling filter. Subukang bawasan ang filter."
+                  : "Wala nang matutugmang ulam. Pindutin ang “Ibang ulam naman” o baguhin ang budget."}
               </p>
             ) : (
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
